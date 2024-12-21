@@ -1,7 +1,7 @@
 # PUSH
 Simple but interesting Windows terminal game.
 
-WASD to move your character around. ESC to shutdown and BACKSPACE to return to the menu.
+WASD to move your character around. ESC to shut down and BACKSPACE to return to the menu.
 The goal is to squish a stack of boxes(5+) against a wall until all the boxes are gone.
 
 you can make custom maps using .txt files.
