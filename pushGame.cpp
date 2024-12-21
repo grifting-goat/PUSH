@@ -1,6 +1,8 @@
 //i got the idea for a an advent of code thing, now i have a game where you must squish boxes into the walls and try to maximize your score
+//WASD to move, esc to escape
 
 #pragma comment(lib, "User32.lib")
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -11,6 +13,8 @@
 #include <Windows.h>
 #include <cstdlib>
 #include <chrono>
+#include <filesystem>
+#include <limits>
 
 using namespace std;
 
@@ -50,73 +54,115 @@ int pR = 0;
 int pC = 0;
 int score = 0;
 int maxScore = 0;
-bool glue = 0;
+bool shutDown = 0;
+
+auto tp0 = chrono::system_clock::now();
+auto tp1 = chrono::system_clock::now();
+auto tp2 = chrono::system_clock::now();
 
 
 int main() {
-    // Create Frame // Get Windows dimensions  // goofy windows stuff
-	HANDLE hCmd = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
-	SetConsoleActiveScreenBuffer(hCmd);
-	DWORD dwBytesWritten = 0;
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(hCmd, &csbi);
 
-    int terminalWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-    int terminalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    wchar_t *frame = new wchar_t[terminalWidth * terminalHeight];
+    string fileName = "";
+    string folderPath = "./";
+    vector<vector<char>> mat; //store the map
+    vector<string> files;
 
-    vector<vector<char>> mat;
-    string fileName = "input.txt";
+    //starting sequence
+    cout << "Welcome to PUSH!\n\n";
+    Sleep(1500);
 
-    //build the map from .txt
-    if (!mapBuilder(fileName, mat)) {
-        return 1;
-    }
+    //meta game loop
+    do {
+        do {
+            cout << "Press enter to use the standard map.\nIf you would like to use a custom map, type the index of the name below:\n";
+            int index = 0;
+            try { //printing out the .txt files in the folder
+                for (const auto& entry : filesystem::directory_iterator(folderPath)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".txt") {
+                        files.push_back(entry.path().filename().string());
+                        cout << "File: " << index++ << "    " << entry.path().filename() << "\n";
+                    }
+                }
+            }
+            catch(const filesystem::filesystem_error& e) {
+                cerr << "Error: " << e.what() << "\n";
+            }
 
-    //inital frame
-    map2screen(frame, mat, hCmd);
-    frame[terminalWidth * terminalHeight - 1] = '\0'; // Ensure null-terminated
-    WriteConsoleOutputCharacterW(hCmd, frame, terminalWidth * terminalHeight, {0, 0}, &dwBytesWritten);
+            while(!getline(cin, fileName)) {continue;}
+            try { //make sure they typed an integer or nothing
+                if (fileName == "") {fileName = "map.txt";}
+                else if (stoi(fileName) < files.size() && stoi(fileName) >= 0) {fileName = files[stoi(fileName)];}
+                else {fileName = "bad";}
+            }
+            catch (const std::invalid_argument& e) {continue;}
 
-    //track command
-    pair<int, int> command;
-
-    //handle timing 
-    auto tp0 = chrono::system_clock::now();
-    auto tp1 = chrono::system_clock::now();
-    auto tp2 = chrono::system_clock::now();
-
-    //game loop
-    while(true) { 
-        //check inputs
-        if      (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {break;}
-        else if (GetAsyncKeyState(VK_SPACE) & 0x8000) {}
-        else if (GetAsyncKeyState('W') & 0x8000) {handleInput('W', command);}
-        else if (GetAsyncKeyState('A') & 0x8000) {handleInput('A', command);}
-        else if (GetAsyncKeyState('S') & 0x8000) {handleInput('S', command);}
-        else if (GetAsyncKeyState('D') & 0x8000) {handleInput('D', command);}
-        else { 
-            continue;
         }
+        while (!mapBuilder(folderPath + fileName, mat));
+        
 
-        tp2 = chrono::system_clock::now();
-        chrono::duration<float> elapsedTime = tp2 - tp1;
-        float fTick = elapsedTime.count();
+        // Create Frame // Get Windows dimensions  // goofy windows stuff
+        HANDLE hCmd = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
+        SetConsoleActiveScreenBuffer(hCmd);
+        DWORD dwBytesWritten = 0;
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        GetConsoleScreenBufferInfo(hCmd, &csbi);
 
-        //cool trick
-        if (fTick >= 0.11f) {
-            if (GetAsyncKeyState(VK_SPACE) & 0x8000) {glue = (glue + 1)%2;} //future update??
-            checkStacks(command, mat);
-            runCom(command, mat);
-            
-            tp1 = tp2; 
-        }
+        int terminalWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+        int terminalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+        wchar_t *frame = new wchar_t[terminalWidth * terminalHeight];
 
-        //windows buffer stuff
+        //inital frame
         map2screen(frame, mat, hCmd);
-        frame[terminalWidth * terminalHeight - 1] = '\0';
+        frame[terminalWidth * terminalHeight - 1] = '\0'; //Ensure null-terminated bc windows
         WriteConsoleOutputCharacterW(hCmd, frame, terminalWidth * terminalHeight, {0, 0}, &dwBytesWritten);
+
+        //track command
+        pair<int, int> command;
+
+        //handle timing 
+        tp0 = chrono::system_clock::now();
+        tp1 = chrono::system_clock::now();
+        tp2 = chrono::system_clock::now();
+
+        //internal game loop
+        while(true) { 
+            //check inputs
+            if      (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {shutDown = 1; break;}
+            if      (GetAsyncKeyState(VK_BACK) & 0x8000) {break;}
+            else if (GetAsyncKeyState('W') & 0x8000) {handleInput('W', command);}
+            else if (GetAsyncKeyState('A') & 0x8000) {handleInput('A', command);}
+            else if (GetAsyncKeyState('S') & 0x8000) {handleInput('S', command);}
+            else if (GetAsyncKeyState('D') & 0x8000) {handleInput('D', command);}
+            else { 
+                continue;
+            }
+
+            //handle more timing
+            tp2 = chrono::system_clock::now();
+            chrono::duration<float> elapsedTime = tp2 - tp1;
+            float fTick = elapsedTime.count();
+
+            //cool trick
+            if (fTick >= 0.11f) { // movement cooldown
+                runCom(command, mat); //run the command
+                checkStacks(command, mat); //check if any boxes have been squished
+                tp1 = tp2; //reset the timer
+            }
+
+            //windows buffer stuff
+            map2screen(frame, mat, hCmd);
+            frame[terminalWidth * terminalHeight - 1] = '\0';
+            WriteConsoleOutputCharacterW(hCmd, frame, terminalWidth * terminalHeight, {0, 0}, &dwBytesWritten);
+        }
+        //post running cleanup
+        CloseHandle(hCmd);
+        delete[] frame;
+        mat.clear();
+        cout << endl << fileName.substr(0, fileName.size()-4) << " has been stopped with a score of " << score << "\n\n";
+        score = 0;
     }
+    while(!shutDown);
 
     return 0;
 }
@@ -150,7 +196,6 @@ bool isValid(int i, int j, pair<int,int> command, vector<vector<char>> &map, int
             return isValid(i + command.first,j + command.second, command,map, recs) && isValid(i + command.first, j + command.second - 1, command,map, recs);
         }
     }
-
     return 0;
 }
 
@@ -158,7 +203,6 @@ bool isValid(int i, int j, pair<int,int> command, vector<vector<char>> &map, int
 void runCom(pair <int, int> com, vector<vector<char>> &mat) {
         int boxCount = 0;
         if (isValid(pR + com.first, pC + com.second, com, mat, boxCount)) {
-            mat[pR][pC] = '.';
             pR += com.first;
             pC += com.second;
             if (com.first == 0) {
@@ -169,6 +213,9 @@ void runCom(pair <int, int> com, vector<vector<char>> &mat) {
                         mat[pR + com.first*n][pC + com.second*n] = '[' + (2*(n%2));
                     }
                 }
+                if (mat[pR][pC] == '[' || mat[pR][pC] == ']') {
+                    mat[pR][pC] = '.';
+                }
             }
             else { // for up and down
                 if (mat[pR][pC] == '[' || mat[pR][pC] == ']') {
@@ -176,8 +223,6 @@ void runCom(pair <int, int> com, vector<vector<char>> &mat) {
                 }
                 
             }
-                    
-            mat[pR][pC] = '@';
         }
     }
 
@@ -215,9 +260,13 @@ void moveBox(int i, int j, bool up,vector<vector<char>> &map) {
 
     //update the map
     for (auto coor : boxIndex) {
-        map[coor.first][coor.second] = '.';
-        map[coor.first][coor.second+1] = '.';
-
+        if  (map[coor.first][coor.second] == '[' || map[coor.first][coor.second] == ']') {
+            map[coor.first][coor.second] = '.';
+        }
+        if  (map[coor.first][coor.second+1] == '[' || map[coor.first][coor.second+1] == ']') {
+            map[coor.first][coor.second+1] = '.';
+        }
+        
     }
     for (auto coor : boxIndex) {
         map[coor.first + dir][coor.second] = '[';
@@ -268,6 +317,18 @@ void map2screen(wchar_t *frame, vector<vector<char>> mat, HANDLE hCmd) {
     for (int i = 0; i < scr.length(); i++) {
         frame[i] = scr[i];
     }
+    
+    /* future timing block
+    chrono::duration<float> elapsedTime = tp2 - tp0;
+    float time = elapsedTime.count();
+    string timestr = "time moving: " + to_string(time);
+    for (int i = 0; i < scr.length(); i++) {
+        frame[i+terminalWidth] = timestr[i];
+    }
+    */
+
+    frame[(startRow + pR) * terminalWidth + (startCol + pC)] = '@';
+    
 }
 
 
@@ -275,7 +336,7 @@ void map2screen(wchar_t *frame, vector<vector<char>> mat, HANDLE hCmd) {
 bool mapBuilder(string fileName, vector<vector<char>> &mat) {
     ifstream file(fileName);
     if (!file.is_open()) {
-        std::cerr << "Error: Could not open file.\n";
+        cerr << "Error: Could not open file.\n";
         return 0;
     }
     string line;
@@ -287,22 +348,27 @@ bool mapBuilder(string fileName, vector<vector<char>> &mat) {
             if (c == '@') {
                 pC = row.size();
                 pR = mat.size();
-                row.push_back(c);
+                row.push_back('.');
                 row.push_back('.');
             }
-            if (c == '.') {
+            else if (c == '.') {
                 row.push_back(c);
                 row.push_back(c);
             }
-            if (c == 'O') {
+            else if (c == 'O') {
                 row.push_back('[');
                 row.push_back(']');
                 maxScore++;
             }
-            if (c == '#') {
+            else if (c == '#') {
                 row.push_back(c);
                 row.push_back(c);
             }
+            else {
+                row.push_back(' ');
+                row.push_back(' ');
+            }
+
         }
         // check if its empty
         if (row.size() == 0) {break;}
