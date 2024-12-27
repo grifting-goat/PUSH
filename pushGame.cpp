@@ -49,10 +49,14 @@ void map2screen(wchar_t *frame, vector<vector<char>> mat, HANDLE hCmd);
 //check to see if a suficient stack has been made
 void checkStacks(pair<int,int> com, vector<vector<char>> &mat);
 
+//save the game
+bool saveGame(vector<vector<char>> &mat, string name);
+
 //initial info // oooh no dont use global variables
 int pR = 0;
 int pC = 0;
 int score = 0;
+float timeSpent = 0;
 int maxScore = 0;
 bool shutDown = 0;
 
@@ -64,24 +68,46 @@ auto tp2 = chrono::system_clock::now();
 int main() {
 
     string fileName = "";
-    string folderPath = "./";
+    string folderPath = "./maps/";
+    string savePath = "./maps/saves/";
     vector<vector<char>> mat; //store the map
     vector<string> files;
+    bool bSave;
+    
 
     //starting sequence
     cout << "Welcome to PUSH!\n\n";
-    Sleep(1500);
 
     //meta game loop
     do {
         do {
-            cout << "Press enter to use the standard map.\nIf you would like to use a custom map, type the index of the name below:\n";
+            fileName = "";
+            files.clear();
+            cout << "Press enter to start a new map, type anything else to load into a save.\n";
+            while(!getline(cin, fileName)) {continue;}
+            if(fileName == "") {
+                cout << "Press enter to use the standard map.\nIf you would like to use a custom map, type the index of the name below:\n";
+                bSave = false;
+            }
+            else {
+                cout << "Enter the index of the save file to resume game.\n";
+                bSave = true;
+            }
+
+            
             int index = 0;
             try { //printing out the .txt files in the folder
                 for (const auto& entry : filesystem::directory_iterator(folderPath)) {
-                    if (entry.is_regular_file() && entry.path().extension() == ".txt") {
+                    if (entry.is_regular_file() && entry.path().extension() == ".txt" && !bSave) {
                         files.push_back(entry.path().filename().string());
                         cout << "File: " << index++ << "    " << entry.path().filename() << "\n";
+                    }
+                    if (entry.is_directory() && entry.path().filename().string() == "saves" && bSave) {
+                        for (const auto& save : filesystem::directory_iterator(savePath)) {
+                            files.push_back(save.path().filename().string());
+                            cout << "Save: " << index++ << "    " << save.path().filename() << "\n";
+                        }
+                        
                     }
                 }
             }
@@ -98,7 +124,7 @@ int main() {
             catch (const std::invalid_argument& e) {continue;}
 
         }
-        while (!mapBuilder(folderPath + fileName, mat));
+        while (!mapBuilder((bSave ? savePath : folderPath) + fileName, mat));
         
 
         // Create Frame // Get Windows dimensions  // goofy windows stuff
@@ -156,11 +182,36 @@ int main() {
             WriteConsoleOutputCharacterW(hCmd, frame, terminalWidth * terminalHeight, {0, 0}, &dwBytesWritten);
         }
         //post running cleanup
+        tp2 = chrono::system_clock::now();
+        chrono::duration<float> elapsedTime = tp2 - tp0;
+        timeSpent += elapsedTime.count();
         CloseHandle(hCmd);
         delete[] frame;
-        mat.clear();
+        
+
+        //return stats and prompt save
         cout << endl << fileName.substr(0, fileName.size()-4) << " has been stopped with a score of " << score << "\n\n";
+        cout << "Would you like to save?(y/n)\n";
+        string boool;
+        while(!getline(cin, boool)) {continue;}
+        if (boool == "y") {
+            time_t t = std::time(nullptr); 
+            tm* now = std::localtime(&t);
+
+            int year = now->tm_year + 1900;
+            int month = now->tm_mon + 1;    
+            int day = now->tm_mday;
+            string saveName = savePath + "/" + fileName.substr(0, fileName.size()- 4);
+            if (!bSave) {
+                saveName += '_' + to_string(year) + '-' + to_string(month) + '-' + to_string(day);
+            }
+            saveGame(mat, saveName);
+        }
+
+        mat.clear();
+        bSave = 0;
         score = 0;
+        timeSpent += elapsedTime.count();
     }
     while(!shutDown);
 
@@ -376,6 +427,46 @@ bool mapBuilder(string fileName, vector<vector<char>> &mat) {
         //add row to vector
         mat.push_back(row);
     }
+
+    //get score
+    try {
+        if (getline(file, line)) {
+            score = stoi(line);
+        }
+    } 
+    catch (const invalid_argument& e) {
+        cerr << e.what();
+    }
+
+    //get time
+    try {
+        if (getline(file, line)) { 
+            timeSpent = stoi(line);
+        }
+    }
+    catch (const invalid_argument& e) {
+        cerr << e.what();
+    }
+
+    //get spawn row
+    try {
+        if (getline(file, line)) { 
+            pR = stoi(line);
+        }
+    }
+    catch (const invalid_argument& e) {
+        cerr << e.what();
+    }
+
+    //get spawn col
+    try {
+        if (getline(file, line)) { 
+            pC = stoi(line);
+        }
+    }
+    catch (const invalid_argument& e) {
+        cerr << e.what();
+    }
     
     return 1;
 }
@@ -424,4 +515,27 @@ void checkStacks(pair<int,int> com, vector<vector<char>> &mat) {
         score += n;
     }
     
+}
+
+bool saveGame(vector<vector<char>> &mat, string name) {
+    ofstream out(name + ".txt");
+    if (out.is_open()) {
+        for (int r = 0; r < mat.size(); r++) {
+            for (int c = 0; c < mat[r].size(); c+=2) {
+
+                if (mat[r][c] == '#') {out << '#';}
+                else if (mat[r][c] == '[') {out << 'O';}
+                else if (mat[r][c] == '.') {out << '.';}
+                else{out << 'b';}
+            }
+            out << endl;
+        }
+    }
+    out << endl;
+    out << score << endl;
+    out << timeSpent << endl;
+    out << pR << endl;
+    out << pC << endl;
+    return 1;
+
 }
